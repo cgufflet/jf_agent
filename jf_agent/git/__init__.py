@@ -12,6 +12,7 @@ from jf_agent.session import retry_session
 from jf_agent.git.bitbucket_cloud_client import BitbucketCloudClient
 from jf_agent.git.github_client import GithubClient
 from jf_agent.git.gitlab_client import GitLabClient
+from jf_agent.git.gitlab_v3_client import GitLabClient_v3
 from jf_agent.config_file_reader import GitConfig
 
 from jf_agent import agent_logging, diagnostics, download_and_write_streaming, write_file
@@ -27,7 +28,8 @@ BBS_PROVIDER = 'bitbucket_server'
 BBC_PROVIDER = 'bitbucket_cloud'
 GH_PROVIDER = 'github'
 GL_PROVIDER = 'gitlab'
-PROVIDERS = [GL_PROVIDER, GH_PROVIDER, BBS_PROVIDER, BBC_PROVIDER]
+GL_PROVIDER_V3 = 'gitlab_v3'
+PROVIDERS = [GL_PROVIDER, GL_PROVIDER_V3, GH_PROVIDER, BBS_PROVIDER, BBC_PROVIDER]
 
 '''
 
@@ -251,6 +253,14 @@ def get_git_client(config: GitConfig, git_creds: dict, skip_ssl_verification: bo
                 per_page_override=config.gitlab_per_page_override,
                 session=retry_session(),
             )
+        if config.git_provider == GL_PROVIDER_V3:
+            return GitLabClient_v3(
+                server_url=config.git_url,
+                private_token=git_creds['gitlab_token'],
+                verify=not skip_ssl_verification,
+                per_page_override=config.gitlab_per_page_override,
+                session=retry_session(),
+            )
 
     except Exception as e:
         agent_logging.log_and_print_error_or_warning(
@@ -317,6 +327,12 @@ def load_and_dump_git(
             GitLabAdapter(config, outdir, compress_output_files, git_connection).load_and_dump_git(
                 endpoint_git_instance_info
             )
+        elif config.git_provider == 'gitlab_v3':
+            from jf_agent.git.gitlab_v3_adapter import GitLabAdapter_v3
+
+            GitLabAdapter_v3(
+                config, outdir, compress_output_files, git_connection
+            ).load_and_dump_git(endpoint_git_instance_info)
         else:
             raise ValueError(f'unsupported git provider {config.git_provider}')
 
@@ -428,6 +444,17 @@ def get_repos_from_git(git_connection, config: GitConfig):
 
         projects = gl_adapter.get_projects()
         repos = gl_adapter.get_repos(projects)
+
+    elif config.git_provider == 'gitlab_v3':
+
+        from jf_agent.git.gitlab_v3_adapter import GitLabAdapter_v3
+
+        gl_adapter = GitLabAdapter_v3(
+            config=config, outdir='', compress_output_files=False, client=git_connection
+        )
+
+        projects = gl_adapter.get_projects()
+        repos = gl_adapter.get_repos(projects)
     else:
         raise ValueError(f'{config.git_provider} is not a supported git_provider for this run_mode')
     return repos
@@ -470,7 +497,9 @@ def get_nested_repos_from_git(git_connection, config: GitConfig):
 
         from jf_agent.git.bitbucket_cloud_adapter import BitbucketCloudAdapter
 
-        bbc_adapter = BitbucketCloudAdapter(config=config, outdir='', compress_output_files=False, client=git_connection)
+        bbc_adapter = BitbucketCloudAdapter(
+            config=config, outdir='', compress_output_files=False, client=git_connection
+        )
 
         projects = bbc_adapter.get_projects()
         for project in projects:
@@ -500,6 +529,19 @@ def get_nested_repos_from_git(git_connection, config: GitConfig):
         from jf_agent.git.gitlab_adapter import GitLabAdapter
 
         gl_adapter = GitLabAdapter(
+            config=config, outdir='', compress_output_files=False, client=git_connection
+        )
+
+        projects = gl_adapter.get_projects()
+        for project in projects:
+            project_repos = [x.name for x in gl_adapter.get_repos([project])]
+            output_dict[project.name] = project_repos
+
+    elif config.git_provider == 'gitlab_v3':
+
+        from jf_agent.git.gitlab_v3_adapter import GitLabAdapter_v3
+
+        gl_adapter = GitLabAdapter_v3(
             config=config, outdir='', compress_output_files=False, client=git_connection
         )
 
