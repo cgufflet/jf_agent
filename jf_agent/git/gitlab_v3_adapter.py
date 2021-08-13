@@ -17,8 +17,8 @@ from jf_agent.git import (
     NormalizedShortRepository,
     pull_since_date_for_repo,
 )
-from jf_agent.git.gitlab_client import (
-    GitLabClient,
+from jf_agent.git.gitlab_v3_client import (
+    GitLabClient_v3,
     log_and_print_request_error,
     MissingSourceProjectException,
 )
@@ -38,12 +38,10 @@ _repo_redactor = NameRedactor()
 
 '''
 
-# TODO: replace the method calls for GitlabListError and GitlabHttpError with gitlab3 methods
-
 
 class GitLabAdapter_v3(GitAdapter):
     def __init__(
-        self, config: GitConfig, outdir: str, compress_output_files: bool, client: GitLabClient
+        self, config: GitConfig, outdir: str, compress_output_files: bool, client: GitLabClient_v3
     ):
         super().__init__(config, outdir, compress_output_files)
         self.client = client

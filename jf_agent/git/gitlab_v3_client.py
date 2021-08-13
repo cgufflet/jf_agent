@@ -83,7 +83,7 @@ class GitLabClient_v3:
             merge_request.note_list = []
 
         try:
-            merge_request.diff = GitLabClient._get_diff_string(merge_request)
+            merge_request.diff = GitLabClient_v3._get_diff_string(merge_request)
         except (requests.exceptions.RetryError, gitlab3.exceptions.GitLabException) as e:
             log_and_print_request_error(
                 e,
