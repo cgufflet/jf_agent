@@ -506,24 +506,10 @@ def get_nested_repos_from_git(git_connection, config: GitConfig):
             ]
             output_dict[org] = [x.name for x in org_repos]
 
-    elif config.git_provider == 'gitlab':
-
+    elif any(key == config.git_provider for key in ['gitlab', 'gitlab_v3']):
         from jf_agent.git.gitlab_adapter import GitLabAdapter
 
         gl_adapter = GitLabAdapter(
-            config=config, outdir='', compress_output_files=False, client=git_connection
-        )
-
-        projects = gl_adapter.get_projects()
-        for project in projects:
-            project_repos = [x.name for x in gl_adapter.get_repos([project])]
-            output_dict[project.name] = project_repos
-
-    elif config.git_provider == 'gitlab_v3':
-
-        from jf_agent.git.gitlab_v3_adapter import GitLabAdapter_v3
-
-        gl_adapter = GitLabAdapter_v3(
             config=config, outdir='', compress_output_files=False, client=git_connection
         )
 
