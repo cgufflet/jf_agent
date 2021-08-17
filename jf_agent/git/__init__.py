@@ -321,7 +321,7 @@ def load_and_dump_git(
                 endpoint_git_instance_info=endpoint_git_instance_info,
                 git_conn=git_connection,
             )
-        elif config.git_provider in ['gitlab','gitlab_v3']:
+        elif config.git_provider in ['gitlab', 'gitlab_v3']:
             from jf_agent.git.gitlab_adapter import GitLabAdapter
 
             GitLabAdapter(config, outdir, compress_output_files, git_connection).load_and_dump_git(
@@ -428,22 +428,10 @@ def get_repos_from_git(git_connection, config: GitConfig):
             )
         )
 
-    elif config.git_provider == 'gitlab':
-
+    elif any(key == config.git_provider for key in ['gitlab', 'gitlab_v3']):
         from jf_agent.git.gitlab_adapter import GitLabAdapter
 
         gl_adapter = GitLabAdapter(
-            config=config, outdir='', compress_output_files=False, client=git_connection
-        )
-
-        projects = gl_adapter.get_projects()
-        repos = gl_adapter.get_repos(projects)
-
-    elif config.git_provider == 'gitlab_v3':
-
-        from jf_agent.git.gitlab_v3_adapter import GitLabAdapter_v3
-
-        gl_adapter = GitLabAdapter_v3(
             config=config, outdir='', compress_output_files=False, client=git_connection
         )
 
