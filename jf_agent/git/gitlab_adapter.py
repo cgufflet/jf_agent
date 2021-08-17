@@ -17,20 +17,11 @@ from jf_agent.git import (
     NormalizedShortRepository,
     pull_since_date_for_repo,
 )
-
-if GitConfig.git_provider == 'gitlab_v3':
-    from jf_agent.git.gitlab_v3_client import (
-        GitLabClient_v3 as GitLabClient,
-        log_and_print_request_error,
-        MissingSourceProjectException,
-    )
-elif GitConfig.git_provider == 'gitlab':
-    from jf_agent.git.gitlab_client import (
-        GitLabClient,
-        log_and_print_request_error,
-        MissingSourceProjectException,
-    )
-
+from jf_agent.git.gitlab_client import (
+    GitLabClient,
+    log_and_print_request_error,
+    MissingSourceProjectException,
+)
 from jf_agent import diagnostics, agent_logging
 from jf_agent.name_redactor import NameRedactor, sanitize_text
 from jf_agent.config_file_reader import GitConfig
