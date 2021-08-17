@@ -321,18 +321,12 @@ def load_and_dump_git(
                 endpoint_git_instance_info=endpoint_git_instance_info,
                 git_conn=git_connection,
             )
-        elif config.git_provider == 'gitlab':
+        elif config.git_provider in ['gitlab','gitlab_v3']:
             from jf_agent.git.gitlab_adapter import GitLabAdapter
 
             GitLabAdapter(config, outdir, compress_output_files, git_connection).load_and_dump_git(
                 endpoint_git_instance_info
             )
-        elif config.git_provider == 'gitlab_v3':
-            from jf_agent.git.gitlab_v3_adapter import GitLabAdapter_v3
-
-            GitLabAdapter_v3(
-                config, outdir, compress_output_files, git_connection
-            ).load_and_dump_git(endpoint_git_instance_info)
         else:
             raise ValueError(f'unsupported git provider {config.git_provider}')
 
