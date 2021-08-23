@@ -11,7 +11,6 @@ from stashy.client import Stash
 from jf_agent.session import retry_session
 from jf_agent.git.bitbucket_cloud_client import BitbucketCloudClient
 from jf_agent.git.github_client import GithubClient
-from jf_agent.git.gitlab_adapter import GitLabAdapter
 from jf_agent.git.gitlab_client import GitLabClient
 from jf_agent.git.gitlab_v3_client import GitLabClient_v3
 from jf_agent.config_file_reader import GitConfig
@@ -323,6 +322,8 @@ def load_and_dump_git(
                 git_conn=git_connection,
             )
         elif config.git_provider in ['gitlab', 'gitlab_v3']:
+            from jf_agent.git.gitlab_adapter import GitLabAdapter
+
             GitLabAdapter(config, outdir, compress_output_files, git_connection).load_and_dump_git(
                 endpoint_git_instance_info
             )

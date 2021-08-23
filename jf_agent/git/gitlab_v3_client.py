@@ -113,36 +113,59 @@ class GitLabClient_v3:
         return merge_request
 
     def get_group(self, group_id):
-        return self.client.groups.get(group_id)
+        groups = self.client.projects()
+        for group in groups:
+            if group.id == group_id:
+                return group
+        return None
 
     def get_project(self, project_id):
-        return self.client.projects.get(project_id)
+        projs = self.client.projects()
+        for proj in projs:
+            if proj.id == project_id:
+                return proj
+        return None
 
     def list_group_projects(self, group_id):
         group = self.get_group(group_id)
-        return group.projects.list(as_list=False, include_subgroups=True)
+        return group.projects()  # .list(as_list=False, include_subgroups=True)
 
     def list_group_members(self, group_id):
         group = self.get_group(group_id)
-        return group.members.list(as_list=False)
+        return group.members()  # .list(as_list=False)
 
     def list_project_branches(self, project_id):
         project = self.get_project(project_id)
-        return project.branches.list(as_list=False)
+        return project.branches()  # .list(as_list=False)
 
     def list_project_merge_requests(self, project_id, state_filter=None):
         project = self.get_project(project_id)
-        return project.mergerequests.list(
-            state=state_filter, as_list=False, order_by='updated_at', sort='desc'
-        )
+        mergerequests = project.mergerequests()
+        if state_filter:
+            mergerequests = {entry for entry in mergerequests if entry.state != state_filter}
+        mergerequests = list(mergerequests.items())
+        return mergerequests
+        # TODO:
+        #       - order_by='updated_at', sort='desc'
+
+        # return project.mergerequests.list(s
+        #    state=state_filter, as_list=False, order_by='updated_at', sort='desc'
+        # )
 
     def list_project_commits(self, project_id, since_date):
         project = self.get_project(project_id)
-        return project.commits.list(since=since_date, as_list=False)
+        commits = list(project.commits())
+        return commits
+        # TODO: filter by since=since_date
+        # return project.commits.list(since=since_date, as_list=False)
 
     def get_project_commit(self, project_id, sha):
         project = self.get_project(project_id)
         try:
-            return project.commits.get(sha)
+            commits = project.commits()
+            for cm in commits:
+                # TODO: get keys on commit objects
+                if cm.sha == sha:
+                    return cm
         except gitlab3.exceptions.GitLabException:
             return None
