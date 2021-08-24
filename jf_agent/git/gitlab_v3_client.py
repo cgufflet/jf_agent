@@ -113,7 +113,7 @@ class GitLabClient_v3:
         return merge_request
 
     def get_group(self, group_id):
-        groups = self.client.projects()
+        groups = self.client.groups()
         for group in groups:
             if group.id == group_id:
                 return group
@@ -140,7 +140,7 @@ class GitLabClient_v3:
 
     def list_project_merge_requests(self, project_id, state_filter=None):
         project = self.get_project(project_id)
-        mergerequests = project.mergerequests()
+        mergerequests = project.merge_requests()
         if state_filter:
             mergerequests = {entry for entry in mergerequests if entry.state != state_filter}
         mergerequests = list(mergerequests.items())
