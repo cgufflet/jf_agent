@@ -257,9 +257,9 @@ def get_git_client(config: GitConfig, git_creds: dict, skip_ssl_verification: bo
             return GitLabClient_v3(
                 server_url=config.git_url,
                 private_token=git_creds['gitlab_token'],
-                verify=not skip_ssl_verification,
-                per_page_override=config.gitlab_per_page_override,
-                session=retry_session(),
+                convert_dates=True,
+                ssl_verify=not skip_ssl_verification,
+                ssl_cert=None,
             )
 
     except Exception as e:

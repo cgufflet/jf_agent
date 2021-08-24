@@ -31,11 +31,18 @@ def log_and_print_request_error(e, action='making request', log_as_exception=Fal
 
 
 class GitLabClient_v3:
-    def __init__(self, server_url, private_token, verify, per_page_override, session):
-        kwargs = {'private_token': private_token, 'session': session}
-        if per_page_override is not None:
-            kwargs['per_page'] = per_page_override
-        if not verify:
+    """
+    __init__(self, server_url, token=None, convert_dates=True, ssl_verify=None, ssl_cert=None)
+
+    Initialize a GitLab connection and optionally supply auth token. 
+    convert_dates can be set to False to disable automatic conversion of date strings to datetime objects. 
+    ssl_verify and ssl_cert are passed to python-requests as the verify and cert arguments, respectively.
+    """
+    def __init__(self, server_url, token, convert_dates=True, ssl_verify=None, ssl_cert=None):
+        kwargs = {'token': token, 'convert_dates': convert_dates}
+        if ssl_cert is not None:
+            kwargs['ssl_cert'] = ssl_cert
+        if not ssl_verify:
             kwargs['ssl_verify'] = False
         self.client = gitlab3.Gitlab(server_url, **kwargs)
 
@@ -113,18 +120,10 @@ class GitLabClient_v3:
         return merge_request
 
     def get_group(self, group_id):
-        groups = self.client.groups()
-        for group in groups:
-            if group.id == group_id:
-                return group
-        return None
+        return self.client.find_group(id=group_id)
 
     def get_project(self, project_id):
-        projs = self.client.projects()
-        for proj in projs:
-            if proj.id == project_id:
-                return proj
-        return None
+        return self.client.find_project(id=project_id)
 
     def list_group_projects(self, group_id):
         group = self.get_group(group_id)

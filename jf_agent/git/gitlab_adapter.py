@@ -1,3 +1,4 @@
+from jf_agent.jf_agent.git.gitlab_v3_client import GitLabClient_v3
 import gitlab
 from tqdm import tqdm
 import requests
@@ -41,10 +42,14 @@ _repo_redactor = NameRedactor()
 
 class GitLabAdapter(GitAdapter):
     def __init__(
-        self, config: GitConfig, outdir: str, compress_output_files: bool, client: GitLabClient
-    ):
+        self, config: GitConfig, outdir: str, compress_output_files: bool): #, client: GitLabClient
+        
+        if GitConfig.git_provider == 'gitlab':
+            self.client = GitLabClient
+        elif GitConfig.git_provider == 'gitlab_v3':
+            self.client = GitLabClient_v3
+
         super().__init__(config, outdir, compress_output_files)
-        self.client = client
 
     @diagnostics.capture_timing()
     @agent_logging.log_entry_exit(logger)

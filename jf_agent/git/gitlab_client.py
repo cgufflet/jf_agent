@@ -37,8 +37,6 @@ class GitLabClient:
             kwargs['per_page'] = per_page_override
         if not verify:
             kwargs['ssl_verify'] = False
-        # if not version:
-        #    kwargs[''] = per_page_override
         self.client = gitlab.Gitlab(server_url, **kwargs)
 
     @staticmethod
