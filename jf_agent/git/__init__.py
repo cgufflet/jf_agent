@@ -254,9 +254,13 @@ def get_git_client(config: GitConfig, git_creds: dict, skip_ssl_verification: bo
                 session=retry_session(),
             )
         if config.git_provider == GL_PROVIDER_V3:
+            # per_page_override=config.gitlab_per_page_override,
+            print(
+                f"Current gitlab_v3 configs: \n server_url: {config.git_url},\n token: {git_creds['gitlab_token']}, convert_dates: {True}, ssl_verify: {not skip_ssl_verification}, ssl_certify: {None}"
+            )
             return GitLabClient_v3(
                 server_url=config.git_url,
-                private_token=git_creds['gitlab_token'],
+                token=git_creds['gitlab_token'],
                 convert_dates=True,
                 ssl_verify=not skip_ssl_verification,
                 ssl_cert=None,

@@ -1,5 +1,6 @@
-from jf_agent.jf_agent.git.gitlab_v3_client import GitLabClient_v3
 import gitlab
+
+# import gitlab3
 from tqdm import tqdm
 import requests
 from dateutil import parser
@@ -42,26 +43,33 @@ _repo_redactor = NameRedactor()
 
 class GitLabAdapter(GitAdapter):
     def __init__(
-        self, config: GitConfig, outdir: str, compress_output_files: bool): #, client: GitLabClient
-        
-        if GitConfig.git_provider == 'gitlab':
-            self.client = GitLabClient
-        elif GitConfig.git_provider == 'gitlab_v3':
-            self.client = GitLabClient_v3
-
+        self, config: GitConfig, outdir: str, compress_output_files: bool, client: GitLabClient
+    ):
         super().__init__(config, outdir, compress_output_files)
+        self.git_client = client
+        # TODO: remove this print statement once debugging is compelte
+        print(
+            f"v3 client wrapped in GitAdapter! Current obj data: \n\n {dir(self.git_client)} \n\n"
+        )
 
     @diagnostics.capture_timing()
     @agent_logging.log_entry_exit(logger)
     def get_projects(self) -> List[NormalizedProject]:
         print('downloading gitlab projects... ', end='', flush=True)
-        projects = [
-            _normalize_project(
-                self.client.get_group(project_id),
-                self.config.git_redact_names_and_urls,  # are group_ids
+        print(f"Current set of git_include_projects: {self.config.git_include_projects}")
+        print(f"Current set of redacted names & urls: {self.config.git_redact_names_and_urls}")
+        print(f"Separate API call for sanity check: {self.git_client.get_group(4)}")
+        projects = []
+        for project_id in self.config.git_include_projects:
+            print(
+                f"Currently searching for projects associated with the following id: {project_id}"
             )
-            for project_id in self.config.git_include_projects
-        ]
+            projects.append(
+                _normalize_project(
+                    self.git_client.get_group(project_id),
+                    self.config.git_redact_names_and_urls,  # are group_ids
+                )
+            )
         print('✓')
 
         if not projects:
@@ -77,7 +85,7 @@ class GitLabAdapter(GitAdapter):
         users = [
             _normalize_user(user)
             for project_id in self.config.git_include_projects
-            for user in self.client.list_group_members(project_id)
+            for user in self.git_client.list_group_members(project_id)
         ]
         print('✓')
         return users
@@ -96,7 +104,7 @@ class GitLabAdapter(GitAdapter):
 
             for i, api_repo in enumerate(
                 tqdm(
-                    self.client.list_group_projects(nrm_project.id),
+                    self.git_client.list_group_projects(nrm_project.id),
                     desc=f'downloading repos for {nrm_project.name}',
                     unit='repos',
                 ),
@@ -173,7 +181,7 @@ class GitLabAdapter(GitAdapter):
         try:
             return [
                 _normalize_branch(api_branch, self.config.git_redact_names_and_urls)
-                for api_branch in self.client.list_project_branches(api_repo.id)
+                for api_branch in self.git_client.list_project_branches(api_repo.id)
             ]
         except requests.exceptions.RetryError as e:
             log_and_print_request_error(
@@ -197,7 +205,7 @@ class GitLabAdapter(GitAdapter):
                 try:
                     for j, commit in enumerate(
                         tqdm(
-                            self.client.list_project_commits(nrm_repo.id, pull_since),
+                            self.git_client.list_project_commits(nrm_repo.id, pull_since),
                             desc=f'downloading commits for {nrm_repo.name}',
                             unit='commits',
                         ),
@@ -237,7 +245,7 @@ class GitLabAdapter(GitAdapter):
                         server_git_instance_info, nrm_repo.project.login, nrm_repo.id, 'prs'
                     )
 
-                    api_prs = self.client.list_project_merge_requests(nrm_repo.id)
+                    api_prs = self.git_client.list_project_merge_requests(nrm_repo.id)
                     total_api_prs = api_prs.total
 
                     if total_api_prs == 0:
@@ -263,7 +271,7 @@ class GitLabAdapter(GitAdapter):
                                 break
 
                             try:
-                                api_pr = self.client.expand_merge_request_data(api_pr)
+                                api_pr = self.git_client.expand_merge_request_data(api_pr)
                             except MissingSourceProjectException as e:
                                 log_and_print_request_error(
                                     e,
@@ -281,7 +289,7 @@ class GitLabAdapter(GitAdapter):
                                 )
                                 for commit in api_pr.commit_list
                             ]
-                            merge_request = self.client.expand_merge_request_data(api_pr)
+                            merge_request = self.git_client.expand_merge_request_data(api_pr)
                             merge_commit = None
                             if (
                                 merge_request.state == 'merged'
@@ -289,7 +297,7 @@ class GitLabAdapter(GitAdapter):
                                 and merge_request.merge_commit_sha
                             ):
                                 merge_commit = _normalize_commit(
-                                    self.client.get_project_commit(
+                                    self.git_client.get_project_commit(
                                         merge_request.project_id, merge_request.merge_commit_sha
                                     ),
                                     nrm_repo,
@@ -353,6 +361,7 @@ def _normalize_user(api_user) -> NormalizedUser:
 
 
 def _normalize_project(api_group, redact_names_and_urls: bool) -> NormalizedProject:
+    print(f"API GROUP: {api_group}, REDACT_BOOL: {redact_names_and_urls}")
     return NormalizedProject(
         id=api_group.id,
         login=api_group.id,

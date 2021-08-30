@@ -38,13 +38,16 @@ class GitLabClient_v3:
     convert_dates can be set to False to disable automatic conversion of date strings to datetime objects. 
     ssl_verify and ssl_cert are passed to python-requests as the verify and cert arguments, respectively.
     """
+
     def __init__(self, server_url, token, convert_dates=True, ssl_verify=None, ssl_cert=None):
         kwargs = {'token': token, 'convert_dates': convert_dates}
         if ssl_cert is not None:
             kwargs['ssl_cert'] = ssl_cert
         if not ssl_verify:
             kwargs['ssl_verify'] = False
-        self.client = gitlab3.Gitlab(server_url, **kwargs)
+        self.client = gitlab3.GitLab(server_url, **kwargs)
+        # TODO: remove this print statement
+        print(f"Successfully created a v3 client! Current usr data: \n\n {dir(self.client)} \n\n")
 
     @staticmethod
     def _get_diff_string(merge_request):
@@ -63,7 +66,7 @@ class GitLabClient_v3:
             - 'diff'            string
         """
 
-        target_project = self.get_project(merge_request.target_project_id)
+        target_project = self.find_project(merge_request.target_project_id)
         merge_request.target_project = target_project
 
         # the source project will be the same if the request is made from the same project
@@ -168,3 +171,6 @@ class GitLabClient_v3:
                     return cm
         except gitlab3.exceptions.GitLabException:
             return None
+
+    def sanity_check_method(self):
+        return True
