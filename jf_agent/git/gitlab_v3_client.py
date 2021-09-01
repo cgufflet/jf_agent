@@ -1,8 +1,8 @@
 import gitlab3
 import logging
 import requests
-
 from jf_agent import agent_logging
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +45,10 @@ class GitLabClient_v3:
             kwargs['ssl_cert'] = ssl_cert
         if not ssl_verify:
             kwargs['ssl_verify'] = False
+        self.server_url = server_url
+        self.agent_args = kwargs
         self.client = gitlab3.GitLab(server_url, **kwargs)
-        # TODO: remove this print statement
-        print(f"Successfully created a v3 client! Current usr data: \n\n {dir(self.client)} \n\n")
-
+ 
     @staticmethod
     def _get_diff_string(merge_request):
         changes = merge_request.changes()
@@ -128,46 +128,43 @@ class GitLabClient_v3:
     def get_project(self, project_id):
         return self.client.find_project(id=project_id)
 
-    def list_group_projects(self, group_id):
-        group = self.get_group(group_id)
-        return group.projects()  # .list(as_list=False, include_subgroups=True)
+    def list_group_projects(self, group_id=None):
+        projects = self.client.projects()
+        return projects
 
     def list_group_members(self, group_id):
         group = self.get_group(group_id)
-        return group.members()  # .list(as_list=False)
+        return group.members()
 
     def list_project_branches(self, project_id):
         project = self.get_project(project_id)
-        return project.branches()  # .list(as_list=False)
+        return project.branches()
 
-    def list_project_merge_requests(self, project_id, state_filter=None):
+    def list_project_merge_requests(self, project_id, state_filter=[None]):
         project = self.get_project(project_id)
         mergerequests = project.merge_requests()
-        if state_filter:
-            mergerequests = {entry for entry in mergerequests if entry.state != state_filter}
-        mergerequests = list(mergerequests.items())
-        return mergerequests
-        # TODO:
-        #       - order_by='updated_at', sort='desc'
-
-        # return project.mergerequests.list(s
-        #    state=state_filter, as_list=False, order_by='updated_at', sort='desc'
-        # )
+        if len(mergerequests) > 0:
+            if state_filter:
+                mergerequests = [entry for entry in mergerequests if entry.state not in state_filter]
+            return mergerequests.sort(key=lambda x: x.created_at, reverse=True)
+        return []
 
     def list_project_commits(self, project_id, since_date):
         project = self.get_project(project_id)
         commits = list(project.commits())
-        return commits
-        # TODO: filter by since=since_date
-        # return project.commits.list(since=since_date, as_list=False)
+        if len(commits) > 0:
+            if since_date:
+                commits = [commit for commit in commits if commit.created_at > since_date]# datetime.strptime(since_date, "%m/%d/%Y").replace(tzinfo=timezone.utc)]
+                commits.sort(key=lambda x: x.created_at, reverse=True)
+            return commits
+        return []
 
     def get_project_commit(self, project_id, sha):
         project = self.get_project(project_id)
         try:
             commits = project.commits()
             for cm in commits:
-                # TODO: get keys on commit objects
-                if cm.sha == sha:
+                if cm.id == sha:
                     return cm
         except gitlab3.exceptions.GitLabException:
             return None

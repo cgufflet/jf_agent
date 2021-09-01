@@ -1,6 +1,4 @@
 import gitlab
-
-# import gitlab3
 from tqdm import tqdm
 import requests
 from dateutil import parser
@@ -47,29 +45,16 @@ class GitLabAdapter(GitAdapter):
     ):
         super().__init__(config, outdir, compress_output_files)
         self.git_client = client
-        # TODO: remove this print statement once debugging is compelte
-        print(
-            f"v3 client wrapped in GitAdapter! Current obj data: \n\n {dir(self.git_client)} \n\n"
-        )
 
     @diagnostics.capture_timing()
     @agent_logging.log_entry_exit(logger)
     def get_projects(self) -> List[NormalizedProject]:
         print('downloading gitlab projects... ', end='', flush=True)
-        print(f"Current set of git_include_projects: {self.config.git_include_projects}")
-        print(f"Current set of redacted names & urls: {self.config.git_redact_names_and_urls}")
-        print(f"Separate API call for sanity check: {self.git_client.get_group(4)}")
-        projects = []
-        for project_id in self.config.git_include_projects:
-            print(
-                f"Currently searching for projects associated with the following id: {project_id}"
+        projects = [_normalize_project(
+                self.git_client.get_group(project_id),
+                self.config.git_redact_names_and_urls  # are group_ids in v4; are project_ids in v3
             )
-            projects.append(
-                _normalize_project(
-                    self.git_client.get_group(project_id),
-                    self.config.git_redact_names_and_urls,  # are group_ids
-                )
-            )
+            for project_id in self.config.git_include_projects]
         print('✓')
 
         if not projects:
@@ -197,7 +182,7 @@ class GitLabAdapter(GitAdapter):
         self, normalized_repos: List[NormalizedRepository], server_git_instance_info,
     ) -> List[NormalizedCommit]:
         print('downloading gitlab default branch commits... ', end='', flush=True)
-        for i, nrm_repo in enumerate(normalized_repos, start=1):
+        for i, nrm_repo in enumerate(normalized_repos, start=1):            
             with agent_logging.log_loop_iters(logger, 'repo for branch commits', i, 1):
                 pull_since = pull_since_date_for_repo(
                     server_git_instance_info, nrm_repo.project.login, nrm_repo.id, 'commits'
@@ -219,6 +204,7 @@ class GitLabAdapter(GitAdapter):
                                 nrm_repo,
                                 self.config.git_strip_text_content,
                                 self.config.git_redact_names_and_urls,
+                                '4' if self.config.git_provider == 'gitlab' else '3',
                             )
 
                 except Exception as e:
@@ -233,20 +219,18 @@ class GitLabAdapter(GitAdapter):
         self, normalized_repos: List[NormalizedRepository], server_git_instance_info,
     ) -> List[NormalizedPullRequest]:
         print('downloading gitlab prs... ', end='', flush=True)
-
         for i, nrm_repo in enumerate(
             tqdm(normalized_repos, desc='downloading prs for repos', unit='repos'), start=1
         ):
 
             with agent_logging.log_loop_iters(logger, 'repo for pull requests', i, 1):
                 try:
-
                     pull_since = pull_since_date_for_repo(
                         server_git_instance_info, nrm_repo.project.login, nrm_repo.id, 'prs'
                     )
 
                     api_prs = self.git_client.list_project_merge_requests(nrm_repo.id)
-                    total_api_prs = api_prs.total
+                    total_api_prs = api_prs.total if self.config.git_provider == 'gitlab' else len(api_prs)
 
                     if total_api_prs == 0:
                         agent_logging.log_and_print(
@@ -337,6 +321,7 @@ class GitLabAdapter(GitAdapter):
 
 '''
 
+#TODO: (potentially) Add v3 models here and remove logic from all other files...
 
 def _normalize_user(api_user) -> NormalizedUser:
     if not api_user:
@@ -361,7 +346,6 @@ def _normalize_user(api_user) -> NormalizedUser:
 
 
 def _normalize_project(api_group, redact_names_and_urls: bool) -> NormalizedProject:
-    print(f"API GROUP: {api_group}, REDACT_BOOL: {redact_names_and_urls}")
     return NormalizedProject(
         id=api_group.id,
         login=api_group.id,
@@ -415,7 +399,7 @@ def _normalize_short_form_repo(api_repo, redact_names_and_urls):
 
 
 def _normalize_commit(
-    api_commit, normalized_repo, strip_text_content: bool, redact_names_and_urls: bool
+    api_commit, normalized_repo, strip_text_content: bool, redact_names_and_urls: bool, api_vrsn: '4',
 ):
     author = NormalizedUser(
         id=f'{api_commit.author_name}<{api_commit.author_email}>',
@@ -430,10 +414,10 @@ def _normalize_commit(
         hash=api_commit.id,
         author=author,
         url=commit_url,
-        commit_date=api_commit.committed_date,
-        author_date=api_commit.authored_date,
+        commit_date=api_commit.committed_date if api_vrsn=='4' else api_commit.created_at,
+        author_date=api_commit.authored_date if api_vrsn=='4' else api_commit.created_at,
         message=sanitize_text(api_commit.message, strip_text_content),
-        is_merge=len(api_commit.parent_ids) > 1,
+        is_merge=len(api_commit.parent_ids) > 1 if api_vrsn=='4' else None, # TODO: fix this, is_merge probably shouldnt be None
         repo=normalized_repo.short(),  # use short form of repo
     )
 
