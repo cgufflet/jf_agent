@@ -38,6 +38,7 @@ class GitLabClient:
         if not verify:
             kwargs['ssl_verify'] = False
         self.client = gitlab.Gitlab(server_url, **kwargs)
+        self.version = '4'
 
     @staticmethod
     def _get_diff_string(merge_request):

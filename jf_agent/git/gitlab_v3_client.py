@@ -48,11 +48,11 @@ class GitLabClient_v3:
         self.server_url = server_url
         self.agent_args = kwargs
         self.client = gitlab3.GitLab(server_url, **kwargs)
- 
+        self.version = '3'
+
     @staticmethod
-    def _get_diff_string(merge_request):
-        changes = merge_request.changes()
-        diffs = [change['diff'] for change in changes['changes']]
+    def _get_diff_string(diffs):
+        diffs = [diff_str for sublist in diffs for diff_str in sublist]
         return '\n'.join(diffs)
 
     def expand_merge_request_data(self, merge_request):
@@ -66,7 +66,7 @@ class GitLabClient_v3:
             - 'diff'            string
         """
 
-        target_project = self.find_project(merge_request.target_project_id)
+        target_project = self.get_project(merge_request.target_project_id)
         merge_request.target_project = target_project
 
         # the source project will be the same if the request is made from the same project
@@ -83,17 +83,17 @@ class GitLabClient_v3:
             merge_request.source_project = target_project
 
         try:
-            merge_request.note_list = merge_request.notes.list(as_list=False)
+            merge_request.note_list = merge_request.notes()
         except (requests.exceptions.RetryError, gitlab3.exceptions.GitLabException) as e:
             log_and_print_request_error(
                 e,
                 f'fetching notes for merge_request {merge_request.id} -- '
                 f'handling it as if it has no notes',
             )
-            merge_request.note_list = []
+            merge_request.note = []
 
         try:
-            merge_request.diff = GitLabClient_v3._get_diff_string(merge_request)
+            merge_request.diff = GitLabClient_v3._get_diff_string(merge_request.diff)
         except (requests.exceptions.RetryError, gitlab3.exceptions.GitLabException) as e:
             log_and_print_request_error(
                 e,
@@ -102,25 +102,26 @@ class GitLabClient_v3:
             )
             merge_request.diff = ''
 
-        try:
-            approvals = merge_request.approvals.get()
-            merge_request.approved_by = approvals.approved_by
-        except (
-            requests.exceptions.RetryError,
-            gitlab3.exceptions.GitLabException,
-            AttributeError,
-        ) as e:
-            log_and_print_request_error(
-                e,
-                f'fetching approvals for merge_request {merge_request.id} -- '
-                f'handling it as if it has no approvals',
-            )
-            merge_request.approved_by = []
-
         # convert the 'commit_list' generator into a list of objects
-        merge_request.commit_list = merge_request.commits()
+        merge_request.commit_list = merge_request.get_commits()
 
         return merge_request
+
+    def get_event(self, checkout_sha=None, project_id=None, action_name='pushed to', find_all=True):
+        # data_keys = ['object_kind', 'event_name', 'before', 'after', 'ref', 'checkout_sha', 'message', 'user_id', 'user_name', 'user_email', 'user_avatar', 'project_id', 'project', 'commits', 'total_commits_count', 'repository']
+        # sub_kwargs = [arg for arg in kwargs.keys() if arg not in data_keys]
+        sub_kwargs = None
+        kwargs = {'action_name': action_name, 'find_all': find_all}
+        proj = self.get_project(project_id=project_id)
+        if checkout_sha is not None:
+            sub_kwargs = {'checkout_sha': checkout_sha}
+        events = proj.find_event(**kwargs)
+        if sub_kwargs:
+            for evnt in events:
+                if evnt.data and evnt.action_name == 'pushed to':
+                    if evnt.data['checkout_sha'] == sub_kwargs['checkout_sha']:
+                        return evnt
+        return events
 
     def get_group(self, group_id):
         return self.client.find_group(id=group_id)
@@ -140,21 +141,25 @@ class GitLabClient_v3:
         project = self.get_project(project_id)
         return project.branches()
 
-    def list_project_merge_requests(self, project_id, state_filter=[None]):
+    def list_project_merge_requests(self, project_id, state_filter=None):
         project = self.get_project(project_id)
         mergerequests = project.merge_requests()
         if len(mergerequests) > 0:
             if state_filter:
-                mergerequests = [entry for entry in mergerequests if entry.state not in state_filter]
-            return mergerequests.sort(key=lambda x: x.created_at, reverse=True)
-        return []
+                mergerequests = [entry for entry in mergerequests if entry.state in state_filter]
+            mergerequests.sort(key=lambda x: x.created_at, reverse=True)
+            mergerequests = self.add_v4_attrs('mergerequest', mergerequests, project)
+            return mergerequests
+        return mergerequests
 
     def list_project_commits(self, project_id, since_date):
         project = self.get_project(project_id)
         commits = list(project.commits())
         if len(commits) > 0:
             if since_date:
-                commits = [commit for commit in commits if commit.created_at > since_date]# datetime.strptime(since_date, "%m/%d/%Y").replace(tzinfo=timezone.utc)]
+                commits = [
+                    commit for commit in commits if commit.created_at > since_date
+                ]  # datetime.strptime(since_date, "%m/%d/%Y").replace(tzinfo=timezone.utc)]
                 commits.sort(key=lambda x: x.created_at, reverse=True)
             return commits
         return []
@@ -162,12 +167,46 @@ class GitLabClient_v3:
     def get_project_commit(self, project_id, sha):
         project = self.get_project(project_id)
         try:
-            commits = project.commits()
-            for cm in commits:
-                if cm.id == sha:
-                    return cm
+            commit = project.find_commit(id=sha)
+            return commit
         except gitlab3.exceptions.GitLabException:
             return None
 
-    def sanity_check_method(self):
-        return True
+    def add_v4_attrs(self, type, dataset, project):
+        if type == 'mergerequest':
+            for i, entry in enumerate(dataset):
+                mrg_evnt = self.get_event(
+                    checkout_sha=entry.sha,
+                    project_id=entry.project_id,
+                    action_name='pushed to',
+                    find_all=True,
+                )
+                mrg_date = mrg_evnt.created_at
+                commits = entry.get_commits()
+                entry.__setattr__('merge_date', mrg_date.isoformat())
+                entry.__setattr__('approved_by', mrg_evnt.author['name'])
+                entry.__setattr__('created_at', entry.created_at.isoformat())
+                entry.__setattr__('updated_at', entry.updated_at.isoformat())
+                entry.__setattr__('updated_at_dt', entry.updated_at)
+                entry.__setattr__('closed_at', mrg_date.isoformat())
+                entry.__setattr__('base_branch', entry.target_branch)
+                entry.__setattr__('head_branch', entry.source_branch)
+                if commits:
+                    diffs = []
+                    for commit_dict in commits:
+                        commit = project.find_commit(id=commit_dict['id'])
+                        if commit:
+                            diffs.extend(commit.diff())
+                    if len(diffs) > 0:
+                        diffs = [obj['diff'].splitlines() for obj in diffs]
+                    entry.__setattr__('diff', diffs)
+                else:
+                    entry.__setattr__('diff', None)
+                dataset[i] = entry
+        elif type == 'commit':
+            print('commit reformatted')
+        elif type == 'comment':
+            print('commit reformatted')
+        elif type == 'user':
+            print('commit reformatted')
+        return dataset
