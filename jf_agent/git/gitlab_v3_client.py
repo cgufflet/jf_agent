@@ -65,7 +65,6 @@ class GitLabClient_v3:
             - 'target_project'  object
             - 'diff'            string
         """
-
         target_project = self.get_project(merge_request.target_project_id)
         merge_request.target_project = target_project
 
@@ -103,13 +102,10 @@ class GitLabClient_v3:
             merge_request.diff = ''
 
         # convert the 'commit_list' generator into a list of objects
-        merge_request.commit_list = merge_request.get_commits()
-
+        merge_request.commit_list = self.get_mergerequest_commits(self, merge_request)
         return merge_request
 
     def get_event(self, checkout_sha=None, project_id=None, action_name='pushed to', find_all=True):
-        # data_keys = ['object_kind', 'event_name', 'before', 'after', 'ref', 'checkout_sha', 'message', 'user_id', 'user_name', 'user_email', 'user_avatar', 'project_id', 'project', 'commits', 'total_commits_count', 'repository']
-        # sub_kwargs = [arg for arg in kwargs.keys() if arg not in data_keys]
         sub_kwargs = None
         kwargs = {'action_name': action_name, 'find_all': find_all}
         proj = self.get_project(project_id=project_id)
@@ -172,6 +168,19 @@ class GitLabClient_v3:
         except gitlab3.exceptions.GitLabException:
             return None
 
+    def get_mergerequest_commits(self, mergerequest, project=None):
+        if project == None:
+            project = self.client.find_project(id=mergerequest.project_id)
+        commits = mergerequest.get_commits()
+        if commits:
+            for i, commit_dict in enumerate(commits):
+                commit = project.find_commit(id=commit_dict['id'])
+                if commit:
+                    commits[i] = commit
+            commits = [commit for commit in commits if type(commit) != type({})]
+            return commits
+        return commits
+
     def add_v4_attrs(self, type, dataset, project):
         if type == 'mergerequest':
             for i, entry in enumerate(dataset):
@@ -182,7 +191,7 @@ class GitLabClient_v3:
                     find_all=True,
                 )
                 mrg_date = mrg_evnt.created_at
-                commits = entry.get_commits()
+                commits = self.get_mergerequest_commits(entry, project)
                 entry.__setattr__('merge_date', mrg_date.isoformat())
                 entry.__setattr__('approved_by', mrg_evnt.author['name'])
                 entry.__setattr__('created_at', entry.created_at.isoformat())
@@ -193,10 +202,8 @@ class GitLabClient_v3:
                 entry.__setattr__('head_branch', entry.source_branch)
                 if commits:
                     diffs = []
-                    for commit_dict in commits:
-                        commit = project.find_commit(id=commit_dict['id'])
-                        if commit:
-                            diffs.extend(commit.diff())
+                    for commit in commits:
+                        diffs.extend(commit.diff())
                     if len(diffs) > 0:
                         diffs = [obj['diff'].splitlines() for obj in diffs]
                     entry.__setattr__('diff', diffs)
@@ -204,6 +211,7 @@ class GitLabClient_v3:
                     entry.__setattr__('diff', None)
                 dataset[i] = entry
         elif type == 'commit':
+
             print('commit reformatted')
         elif type == 'comment':
             print('commit reformatted')
